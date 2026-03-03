@@ -1,0 +1,108 @@
+import React from 'react';
+import { useDraggable } from '@dnd-kit/core';
+import { Play, Square, Settings, Trash2, FolderOpen, GripVertical } from 'lucide-react';
+import { InstanceWithRuntime } from '../types';
+import { StatusBadge } from './StatusBadge';
+
+interface InstanceCardProps {
+  instance: InstanceWithRuntime;
+  isSelected: boolean;
+  onSelect: () => void;
+  onStart: () => void;
+  onStop: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+export const InstanceCard: React.FC<InstanceCardProps> = ({
+  instance,
+  isSelected,
+  onSelect,
+  onStart,
+  onStop,
+  onEdit,
+  onDelete,
+}) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: instance.id,
+  });
+
+  const style: React.CSSProperties = {
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  const isRunning = instance.runtime.processState === 'running';
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-gray-800 rounded-lg p-3 cursor-pointer border transition-colors ${
+        isSelected
+          ? 'border-blue-500 shadow-lg shadow-blue-500/10'
+          : 'border-gray-700 hover:border-gray-600'
+      }`}
+      onClick={onSelect}
+    >
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          <span
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing text-gray-500 hover:text-gray-300 flex-shrink-0"
+            onClick={e => e.stopPropagation()}
+          >
+            <GripVertical size={14} />
+          </span>
+          <h3 className="font-medium text-sm truncate">{instance.name}</h3>
+        </div>
+        <StatusBadge state={instance.runtime.processState} />
+      </div>
+
+      <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
+        <FolderOpen size={12} />
+        <span className="truncate">{instance.workingDirectory}</span>
+      </div>
+
+      {instance.model && (
+        <div className="text-xs text-gray-500 mb-3 truncate">
+          模型: {instance.model}
+        </div>
+      )}
+
+      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+        {!isRunning ? (
+          <button
+            onClick={onStart}
+            className="p-1.5 rounded hover:bg-gray-700 text-green-400 hover:text-green-300"
+            title="启动"
+          >
+            <Play size={14} />
+          </button>
+        ) : (
+          <button
+            onClick={onStop}
+            className="p-1.5 rounded hover:bg-gray-700 text-yellow-400 hover:text-yellow-300"
+            title="停止"
+          >
+            <Square size={14} />
+          </button>
+        )}
+        <button
+          onClick={onEdit}
+          className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
+          title="设置"
+        >
+          <Settings size={14} />
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-red-400"
+          title="删除"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+};
