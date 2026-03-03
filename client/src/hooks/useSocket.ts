@@ -6,6 +6,9 @@ export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [instances, setInstances] = useState<InstanceWithRuntime[]>([]);
+  const [authPrompts, setAuthPrompts] = useState<Set<string>>(new Set());
+  const [taskCompletes, setTaskCompletes] = useState<Set<string>>(new Set());
+  const [tokenStats, setTokenStats] = useState<Map<string, { tokens: number; elapsed: string }>>(new Map());
 
   useEffect(() => {
     const socket = io('/', {
@@ -47,6 +50,25 @@ export function useSocket() {
       ));
     });
 
+    // Auth prompt notifications
+    socket.on('instance:authPrompt', ({ instanceId }: { instanceId: string }) => {
+      setAuthPrompts(prev => new Set(prev).add(instanceId));
+    });
+
+    // Task completion notifications
+    socket.on('instance:taskComplete', ({ instanceId }: { instanceId: string }) => {
+      setTaskCompletes(prev => new Set(prev).add(instanceId));
+    });
+
+    // Token stats updates
+    socket.on('instance:tokenStats', ({ instanceId, tokens, elapsed }: { instanceId: string; tokens: number; elapsed: string }) => {
+      setTokenStats(prev => {
+        const next = new Map(prev);
+        next.set(instanceId, { tokens, elapsed });
+        return next;
+      });
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -62,11 +84,32 @@ export function useSocket() {
     }
   }, []);
 
+  const clearAuthPrompt = useCallback((id: string) => {
+    setAuthPrompts(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const clearTaskComplete = useCallback((id: string) => {
+    setTaskCompletes(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
   return {
     connected,
     instances,
     setInstances,
     socket: socketRef.current,
     refreshInstances,
+    authPrompts,
+    taskCompletes,
+    tokenStats,
+    clearAuthPrompt,
+    clearTaskComplete,
   };
 }

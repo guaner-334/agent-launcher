@@ -1,10 +1,46 @@
 import * as pty from 'node-pty';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Instance } from '../types';
+import { Instance, SessionEntry } from '../types';
 import { ensureIsolatedConfig } from './configIsolation';
 
 type PtyEventCallback = (instanceId: string, data: any) => void;
+
+// Strip ANSI escape sequences and terminal control chars for pattern matching
+function stripAnsi(text: string): string {
+  return text
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')   // CSI sequences (incl ?25h etc)
+    .replace(/\x1b\][^\x07]*\x07/g, '')         // OSC sequences
+    .replace(/\x1b[\[\]()#;?]*[0-9;]*[a-zA-Z]/g, '') // remaining ESC sequences
+    .replace(/\r([^\n])/g, '\n$1')              // CR without LF → treat as newline
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''); // control chars (keep \t \n \r)
+}
+
+// Patterns that indicate Claude Code is asking for user approval
+const AUTH_PATTERNS = [
+  /Do you want to (?:proceed|create|allow|update|delete|remove|overwrite|replace|run|execute)/i,
+  /Do you want to use this API key/i,
+  /\(Y\)es\s*\/\s*\(N\)o/i,
+  /\[Y\/n\]/i,
+  /\[y\/N\]/i,
+  /Allow\s+(this|once|always)/i,
+  /Press Enter to confirm/i,
+  /Want to proceed\?/i,
+  /approve this/i,
+  /1\.\s*Yes\s+2\.\s*Yes,\s*allow/i,
+  /❯\s*1\.\s*Yes/,
+  /Is this a project you.*trust/i,
+];
+
+// Patterns that indicate Claude Code is idle (waiting for user input)
+const IDLE_PROMPT_PATTERNS = [
+  />\s*$/m,
+];
+
+interface TokenStats {
+  tokens: number;
+  elapsed: string;
+}
 
 interface PtyInstance {
   pty: pty.IPty;
@@ -13,15 +49,25 @@ interface PtyInstance {
   scrollbackBuffer: string[];
   scrollbackSize: number;
   startedAt: string;
+  lineBuffer: string;
+  busy: boolean;
+  bytesSinceIdle: number;
+  tokenStats: TokenStats | null;
 }
 
 const MAX_SCROLLBACK_CHARS = 100 * 1024; // 100KB per instance
+const MAX_LINE_BUFFER = 2000;
+const BUSY_THRESHOLD = 200;
 const LOGS_DIR = path.resolve(__dirname, '../../../data/logs');
+const TOKEN_REGEX = /Working[…\.]+\s+\(([^·]+)\s*·\s*[↓↑]\s*([\d,]+)\s*tokens/;
 
 class PtyManager {
   private ptys: Map<string, PtyInstance> = new Map();
   private onDataCallback: PtyEventCallback | null = null;
   private onExitCallback: PtyEventCallback | null = null;
+  private onAuthPromptCallback: PtyEventCallback | null = null;
+  private onTaskCompleteCallback: PtyEventCallback | null = null;
+  private onTokenStatsCallback: PtyEventCallback | null = null;
 
   onData(callback: PtyEventCallback): void {
     this.onDataCallback = callback;
@@ -31,13 +77,30 @@ class PtyManager {
     this.onExitCallback = callback;
   }
 
+  onAuthPrompt(callback: PtyEventCallback): void {
+    this.onAuthPromptCallback = callback;
+  }
+
+  onTaskComplete(callback: PtyEventCallback): void {
+    this.onTaskCompleteCallback = callback;
+  }
+
+  onTokenStats(callback: PtyEventCallback): void {
+    this.onTokenStatsCallback = callback;
+  }
+
+  getTokenStats(instanceId: string): TokenStats | null {
+    const ptyInst = this.ptys.get(instanceId);
+    return ptyInst?.tokenStats ?? null;
+  }
+
   startInstance(instance: Instance, cols: number = 120, rows: number = 30): boolean {
     // Kill existing PTY if any
     this.stopInstance(instance.id);
 
     // Validate working directory
     if (!fs.existsSync(instance.workingDirectory)) {
-      console.error(`[PTY] [${instance.id}] 工作目录不存在: ${instance.workingDirectory}`);
+      console.error(`[PTY] [${instance.id}] Working directory not found: ${instance.workingDirectory}`);
       return false;
     }
 
@@ -61,9 +124,6 @@ class PtyManager {
     }
 
     // API configuration
-    // Note: ANTHROPIC_AUTH_TOKEN from global ~/.claude/settings.json is needed
-    // for Claude CLI startup connectivity check. Instance apiKey/apiBaseUrl
-    // override actual API requests via env vars.
     if (instance.apiKey) {
       env.ANTHROPIC_API_KEY = instance.apiKey;
     }
@@ -73,9 +133,7 @@ class PtyManager {
       delete env.ANTHROPIC_BASE_URL;
     }
 
-    // Isolate Claude config directory:
-    // 1. Use explicit claudeConfigDir if user provided one
-    // 2. Auto-create isolation when apiBaseUrl is set (avoids CC-Switch conflicts / 502)
+    // Isolate Claude config directory
     if (instance.claudeConfigDir) {
       env.CLAUDE_CONFIG_DIR = instance.claudeConfigDir;
     } else if (instance.apiBaseUrl) {
@@ -143,6 +201,10 @@ class PtyManager {
       scrollbackBuffer: [],
       scrollbackSize: 0,
       startedAt,
+      lineBuffer: '',
+      busy: false,
+      bytesSinceIdle: 0,
+      tokenStats: null,
     };
 
     this.ptys.set(instance.id, ptyInst);
@@ -163,6 +225,60 @@ class PtyManager {
       // Forward to socket
       if (this.onDataCallback) {
         this.onDataCallback(instance.id, { type: 'pty:data', data });
+      }
+
+      // Pattern matching on stripped text
+      const stripped = stripAnsi(data);
+
+      // Accumulate into lineBuffer first so all detections see current chunk
+      ptyInst.lineBuffer += stripped;
+      if (ptyInst.lineBuffer.length > MAX_LINE_BUFFER) {
+        ptyInst.lineBuffer = ptyInst.lineBuffer.slice(-MAX_LINE_BUFFER);
+      }
+
+      // Token stats detection on raw stripped chunk and accumulated lineBuffer
+      if (this.onTokenStatsCallback) {
+        const tokenMatch = TOKEN_REGEX.exec(stripped) || TOKEN_REGEX.exec(ptyInst.lineBuffer);
+        if (tokenMatch) {
+          const elapsed = tokenMatch[1].trim();
+          const tokens = parseInt(tokenMatch[2].replace(/,/g, ''), 10);
+          if (!isNaN(tokens)) {
+            ptyInst.tokenStats = { tokens, elapsed };
+            this.onTokenStatsCallback(instance.id, { tokens, elapsed });
+          }
+        }
+      }
+
+      // Auth prompt detection — match on both raw chunk and accumulated lineBuffer
+      if (this.onAuthPromptCallback) {
+        let authDetected = false;
+        for (const pattern of AUTH_PATTERNS) {
+          if (pattern.test(stripped) || pattern.test(ptyInst.lineBuffer)) {
+            authDetected = true;
+            break;
+          }
+        }
+        if (authDetected) {
+          this.onAuthPromptCallback(instance.id, { type: 'instance:authPrompt' });
+          ptyInst.lineBuffer = '';
+        }
+      }
+
+      // Task completion detection
+      ptyInst.bytesSinceIdle += stripped.length;
+      if (stripped.trim().length > 0) {
+        ptyInst.busy = true;
+      }
+      if (this.onTaskCompleteCallback && ptyInst.busy && ptyInst.bytesSinceIdle > BUSY_THRESHOLD) {
+        for (const pattern of IDLE_PROMPT_PATTERNS) {
+          if (pattern.test(ptyInst.lineBuffer)) {
+            this.onTaskCompleteCallback(instance.id, { type: 'instance:taskComplete' });
+            ptyInst.busy = false;
+            ptyInst.bytesSinceIdle = 0;
+            ptyInst.lineBuffer = '';
+            break;
+          }
+        }
       }
     });
 
@@ -242,6 +358,49 @@ class PtyManager {
     } catch (e) {
       return false;
     }
+  }
+
+  getSessionHistory(instanceId: string): SessionEntry[] {
+    const logPath = this.getLogPath(instanceId);
+    if (!fs.existsSync(logPath)) return [];
+
+    const content = fs.readFileSync(logPath, 'utf-8');
+    const sessions: SessionEntry[] = [];
+
+    const startRegex = /--- Session started: (.+?) ---/g;
+    const endRegex = /--- Session ended: (.+?) \(code=(.+?), signal=(.+?)\) ---/g;
+
+    const starts: { time: string; index: number }[] = [];
+    let match;
+    while ((match = startRegex.exec(content)) !== null) {
+      starts.push({ time: match[1], index: match.index });
+    }
+
+    const ends: { time: string; exitCode: string; signal: string; index: number }[] = [];
+    while ((match = endRegex.exec(content)) !== null) {
+      ends.push({
+        time: match[1],
+        exitCode: match[2],
+        signal: match[3],
+        index: match.index,
+      });
+    }
+
+    for (const start of starts) {
+      const matchingEnd = ends.find(e => e.index > start.index);
+      if (matchingEnd) {
+        ends.splice(ends.indexOf(matchingEnd), 1);
+      }
+      const exitCode = matchingEnd ? parseInt(matchingEnd.exitCode, 10) : null;
+      sessions.push({
+        startedAt: start.time,
+        endedAt: matchingEnd?.time || null,
+        exitCode: exitCode !== null && !isNaN(exitCode) ? exitCode : null,
+        signal: matchingEnd ? (matchingEnd.signal === 'undefined' ? null : matchingEnd.signal) : null,
+      });
+    }
+
+    return sessions;
   }
 }
 

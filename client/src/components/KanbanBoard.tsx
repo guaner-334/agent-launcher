@@ -2,7 +2,7 @@ import React from 'react';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { InstanceWithRuntime, KanbanStatus } from '../types';
 import { KanbanColumn } from './KanbanColumn';
-import { Plus, GripVertical, Play, Square, Settings, Trash2, FolderOpen } from 'lucide-react';
+import { Plus, GripVertical, Play, Square, Settings, Trash2, FolderOpen, Globe, History } from 'lucide-react';
 import { StatusBadge } from './StatusBadge';
 
 const COLUMNS: KanbanStatus[] = ['todo', 'in-progress', 'review', 'done'];
@@ -10,6 +10,9 @@ const COLUMNS: KanbanStatus[] = ['todo', 'in-progress', 'review', 'done'];
 interface KanbanBoardProps {
   instances: InstanceWithRuntime[];
   selectedId: string | null;
+  authPrompts: Set<string>;
+  taskCompletes: Set<string>;
+  tokenStats: Map<string, { tokens: number; elapsed: string }>;
   onSelect: (id: string) => void;
   onStart: (id: string) => void;
   onStop: (id: string) => void;
@@ -17,11 +20,15 @@ interface KanbanBoardProps {
   onDelete: (id: string) => void;
   onKanbanMove: (instanceId: string, newStatus: KanbanStatus) => void;
   onCreateNew: () => void;
+  onShowSessions: (id: string) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   instances,
   selectedId,
+  authPrompts,
+  taskCompletes,
+  tokenStats,
   onSelect,
   onStart,
   onStop,
@@ -29,6 +36,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onDelete,
   onKanbanMove,
   onCreateNew,
+  onShowSessions,
 }) => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -82,11 +90,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               status={status}
               instances={instances.filter(i => i.kanbanStatus === status)}
               selectedId={selectedId}
+              authPrompts={authPrompts}
+              taskCompletes={taskCompletes}
+              tokenStats={tokenStats}
               onSelect={onSelect}
               onStart={onStart}
               onStop={onStop}
               onEdit={onEdit}
               onDelete={onDelete}
+              onShowSessions={onShowSessions}
             />
           ))}
         </div>
@@ -110,6 +122,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   <FolderOpen size={12} />
                   <span className="truncate">{inst.workingDirectory}</span>
                 </div>
+                {inst.apiBaseUrl && (
+                  <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
+                    <Globe size={12} />
+                    <span className="truncate">{inst.apiBaseUrl}</span>
+                  </div>
+                )}
                 {inst.model && (
                   <div className="text-xs text-gray-500 mb-3 truncate">
                     模型: {inst.model}

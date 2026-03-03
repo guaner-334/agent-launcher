@@ -1,27 +1,35 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { Play, Square, Settings, Trash2, FolderOpen, GripVertical } from 'lucide-react';
+import { Play, Square, Settings, Trash2, FolderOpen, GripVertical, Globe, History, ShieldAlert, CheckCircle, ArrowDown } from 'lucide-react';
 import { InstanceWithRuntime } from '../types';
 import { StatusBadge } from './StatusBadge';
 
 interface InstanceCardProps {
   instance: InstanceWithRuntime;
   isSelected: boolean;
+  hasAuthPrompt?: boolean;
+  hasTaskComplete?: boolean;
+  tokenStats?: { tokens: number; elapsed: string };
   onSelect: () => void;
   onStart: () => void;
   onStop: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onShowSessions: () => void;
 }
 
 export const InstanceCard: React.FC<InstanceCardProps> = ({
   instance,
   isSelected,
+  hasAuthPrompt,
+  hasTaskComplete,
+  tokenStats,
   onSelect,
   onStart,
   onStop,
   onEdit,
   onDelete,
+  onShowSessions,
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: instance.id,
@@ -57,6 +65,16 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
           <h3 className="font-medium text-sm truncate">{instance.name}</h3>
         </div>
         <StatusBadge state={instance.runtime.processState} />
+        {hasAuthPrompt && (
+          <span className="flex-shrink-0 text-amber-400 animate-pulse" title="Needs approval">
+            <ShieldAlert size={14} />
+          </span>
+        )}
+        {hasTaskComplete && (
+          <span className="flex-shrink-0 text-green-400" title="Task completed">
+            <CheckCircle size={14} />
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
@@ -64,9 +82,23 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         <span className="truncate">{instance.workingDirectory}</span>
       </div>
 
+      {instance.apiBaseUrl && (
+        <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
+          <Globe size={12} />
+          <span className="truncate">{instance.apiBaseUrl}</span>
+        </div>
+      )}
+
       {instance.model && (
         <div className="text-xs text-gray-500 mb-3 truncate">
           模型: {instance.model}
+        </div>
+      )}
+
+      {tokenStats && (
+        <div className="flex items-center gap-1 text-xs text-cyan-400 mb-3">
+          <ArrowDown size={12} />
+          <span>{tokenStats.tokens.toLocaleString()} tokens · {tokenStats.elapsed}</span>
         </div>
       )}
 
@@ -91,9 +123,16 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         <button
           onClick={onEdit}
           className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
-          title="设置"
+          title="Settings"
         >
           <Settings size={14} />
+        </button>
+        <button
+          onClick={onShowSessions}
+          className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
+          title="Session history"
+        >
+          <History size={14} />
         </button>
         <button
           onClick={onDelete}

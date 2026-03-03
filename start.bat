@@ -3,40 +3,53 @@ title AgentManager
 cd /d "%~dp0"
 
 echo.
-echo  ╔═══════════════════════════════════════╗
-echo  ║        AgentManager Starting...       ║
-echo  ╚═══════════════════════════════════════╝
+echo  ========================================
+echo        AgentManager Starting...
+echo  ========================================
 echo.
 
-:: 检查 Node.js
+:: Check Node.js
 where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo  [错误] 未检测到 Node.js，请先运行 setup.ps1 安装环境
+    echo  [ERROR] Node.js not found. Please run setup.ps1 first.
     echo.
     pause
     exit /b 1
 )
 
-:: 检查 server/dist/index.js 是否存在
-if not exist "server\dist\index.js" (
-    echo  [提示] 未检测到构建产物，正在构建...
+:: Install dependencies if needed
+if not exist "node_modules" (
+    echo  [INFO] Installing dependencies...
     echo.
-    call npm run build 2>nul
-    if not exist "server\dist\index.js" (
-        echo  [错误] 构建失败，请先运行 setup.ps1 或手动执行 npm install ^&^& npm run build
+    call npm install
+    if %errorlevel% neq 0 (
+        echo  [ERROR] npm install failed. Please run setup.ps1 first.
         echo.
         pause
         exit /b 1
     )
 )
 
-echo   访问地址: http://localhost:3000
-echo   关闭此窗口可停止服务
+:: Build if needed
+if not exist "server\dist\index.js" (
+    echo  [INFO] Build not found, building now...
+    echo.
+    call npm run build
+    if not exist "server\dist\index.js" (
+        echo  [ERROR] Build failed.
+        echo.
+        pause
+        exit /b 1
+    )
+)
+
+echo   URL: http://localhost:3000
+echo   Close this window to stop the server.
 echo.
 
-:: 延迟 1 秒后打开浏览器（给服务启动时间）
+:: Open browser after 2s delay
 start /b cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:3000"
 
-:: 启动服务（阻塞，窗口关闭 = 服务停止）
+:: Start server (blocking)
 node server\dist\index.js
 pause

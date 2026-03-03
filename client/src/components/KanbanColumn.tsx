@@ -14,22 +14,30 @@ interface KanbanColumnProps {
   status: KanbanStatus;
   instances: InstanceWithRuntime[];
   selectedId: string | null;
+  authPrompts: Set<string>;
+  taskCompletes: Set<string>;
+  tokenStats: Map<string, { tokens: number; elapsed: string }>;
   onSelect: (id: string) => void;
   onStart: (id: string) => void;
   onStop: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  onShowSessions: (id: string) => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   status,
   instances,
   selectedId,
+  authPrompts,
+  taskCompletes,
+  tokenStats,
   onSelect,
   onStart,
   onStop,
   onEdit,
   onDelete,
+  onShowSessions,
 }) => {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const config = COLUMN_CONFIG[status];
@@ -54,11 +62,15 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             key={instance.id}
             instance={instance}
             isSelected={instance.id === selectedId}
+            hasAuthPrompt={authPrompts.has(instance.id)}
+            hasTaskComplete={taskCompletes.has(instance.id)}
+            tokenStats={tokenStats.get(instance.id)}
             onSelect={() => onSelect(instance.id)}
             onStart={() => onStart(instance.id)}
             onStop={() => onStop(instance.id)}
             onEdit={() => onEdit(instance.id)}
             onDelete={() => onDelete(instance.id)}
+            onShowSessions={() => onShowSessions(instance.id)}
           />
         ))}
       </div>

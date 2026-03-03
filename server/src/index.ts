@@ -57,6 +57,12 @@ io.on('connection', (socket) => {
       socket.emit('pty:scrollback', { instanceId, data: scrollback });
     }
 
+    // Send current token stats if available
+    const tokenStats = ptyManager.getTokenStats(instanceId);
+    if (tokenStats) {
+      socket.emit('instance:tokenStats', { instanceId, tokens: tokenStats.tokens, elapsed: tokenStats.elapsed });
+    }
+
     // Resize PTY to match client terminal
     ptyManager.resize(instanceId, cols, rows);
   });
@@ -98,6 +104,21 @@ ptyManager.onExit((instanceId, event) => {
     exitCode: event.exitCode,
     signal: event.signal,
   });
+});
+
+// Forward auth prompt notifications
+ptyManager.onAuthPrompt((instanceId) => {
+  io.emit('instance:authPrompt', { instanceId });
+});
+
+// Forward task completion notifications
+ptyManager.onTaskComplete((instanceId) => {
+  io.emit('instance:taskComplete', { instanceId });
+});
+
+// Forward token stats
+ptyManager.onTokenStats((instanceId, stats) => {
+  io.emit('instance:tokenStats', { instanceId, tokens: stats.tokens, elapsed: stats.elapsed });
 });
 
 const PORT = process.env.PORT || 3000;

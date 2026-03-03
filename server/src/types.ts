@@ -21,3 +21,10 @@ export interface InstanceRuntime {
 export interface InstanceWithRuntime extends Instance {
   runtime: InstanceRuntime;
 }
+
+export interface SessionEntry {
+  startedAt: string;
+  endedAt: string | null;
+  exitCode: number | null;
+  signal: string | null;
+}

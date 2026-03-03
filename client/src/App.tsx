@@ -2,15 +2,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSocket } from './hooks/useSocket';
 import { KanbanBoard } from './components/KanbanBoard';
 import { TerminalPanel } from './components/TerminalPanel';
+import { WelcomePanel } from './components/WelcomePanel';
 import { ConfigDialog } from './components/ConfigDialog';
+import { SessionHistoryDialog } from './components/SessionHistoryDialog';
 import { Instance, KanbanStatus } from './types';
 import { Wifi, WifiOff } from 'lucide-react';
 
 const App: React.FC = () => {
-  const { connected, instances, setInstances, socket, refreshInstances } = useSocket();
+  const {
+    connected, instances, setInstances, socket, refreshInstances,
+    authPrompts, taskCompletes, tokenStats, clearAuthPrompt, clearTaskComplete,
+  } = useSocket();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingInstance, setEditingInstance] = useState<Instance | null>(null);
   const [showConfig, setShowConfig] = useState(false);
+  const [sessionHistoryId, setSessionHistoryId] = useState<string | null>(null);
 
   // Refresh instances on mount
   useEffect(() => {
@@ -19,15 +25,26 @@ const App: React.FC = () => {
 
   const selectedInstance = instances.find(i => i.id === selectedId) || null;
 
+  // Unified select handler: clears notifications
+  const handleSelect = useCallback((id: string) => {
+    setSelectedId(id);
+    clearAuthPrompt(id);
+    clearTaskComplete(id);
+  }, [clearAuthPrompt, clearTaskComplete]);
+
   const handleStart = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/instances/${id}/start`, { method: 'POST' });
       const data = await res.json();
       setInstances(prev => prev.map(i => i.id === id ? data : i));
+      // Auto-select on start
+      setSelectedId(id);
+      clearAuthPrompt(id);
+      clearTaskComplete(id);
     } catch (err) {
       console.error('Failed to start instance:', err);
     }
-  }, [setInstances]);
+  }, [setInstances, clearAuthPrompt, clearTaskComplete]);
 
   const handleStop = useCallback(async (id: string) => {
     try {
@@ -40,7 +57,7 @@ const App: React.FC = () => {
   }, [setInstances]);
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm('确定删除该实例？')) return;
+    if (!confirm('Delete this instance?')) return;
     try {
       await fetch(`/api/instances/${id}`, { method: 'DELETE' });
       setInstances(prev => prev.filter(i => i.id !== id));
@@ -105,41 +122,55 @@ const App: React.FC = () => {
     setShowConfig(true);
   }, []);
 
+  const handleShowSessions = useCallback((id: string) => {
+    setSessionHistoryId(id);
+  }, []);
+
+  // Don't show task complete badge for the currently selected instance
+  const effectiveTaskCompletes = new Set(taskCompletes);
+  if (selectedId) effectiveTaskCompletes.delete(selectedId);
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Connection status bar */}
       <div className={`flex items-center gap-2 px-3 py-1 text-xs ${connected ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
         {connected ? <Wifi size={12} /> : <WifiOff size={12} />}
-        {connected ? '已连接' : '连接断开'}
+        {connected ? 'Connected' : 'Disconnected'}
       </div>
 
       {/* Main layout */}
       <div className="flex-1 flex min-h-0">
         {/* Left: Kanban */}
-        <div className={`flex-1 min-w-0 ${selectedInstance ? 'w-1/2' : 'w-full'}`}>
+        <div className="flex-1 min-w-0">
           <KanbanBoard
             instances={instances}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            authPrompts={authPrompts}
+            taskCompletes={effectiveTaskCompletes}
+            tokenStats={tokenStats}
+            onSelect={handleSelect}
             onStart={handleStart}
             onStop={handleStop}
             onEdit={handleEdit}
             onDelete={handleDelete}
             onKanbanMove={handleKanbanMove}
             onCreateNew={handleCreateNew}
+            onShowSessions={handleShowSessions}
           />
         </div>
 
-        {/* Right: Terminal Panel */}
-        {selectedInstance && (
-          <div className="w-1/2 border-l border-gray-700 flex-shrink-0">
+        {/* Right: Terminal Panel or Welcome */}
+        <div className="w-1/2 border-l border-gray-700 flex-shrink-0">
+          {selectedInstance ? (
             <TerminalPanel
               instance={selectedInstance}
               socket={socket}
               onClose={() => setSelectedId(null)}
             />
-          </div>
-        )}
+          ) : (
+            <WelcomePanel />
+          )}
+        </div>
       </div>
 
       {/* Config Dialog */}
@@ -153,6 +184,18 @@ const App: React.FC = () => {
           }}
         />
       )}
+
+      {/* Session History Dialog */}
+      {sessionHistoryId && (() => {
+        const inst = instances.find(i => i.id === sessionHistoryId);
+        return inst ? (
+          <SessionHistoryDialog
+            instanceId={sessionHistoryId}
+            instanceName={inst.name}
+            onClose={() => setSessionHistoryId(null)}
+          />
+        ) : null;
+      })()}
     </div>
   );
 };

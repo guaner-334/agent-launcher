@@ -154,11 +154,23 @@ router.get('/:id/log', (req, res) => {
   fs.createReadStream(logPath).pipe(res);
 });
 
-// DELETE /api/instances/:id/log - 删除终端日志
+// DELETE /api/instances/:id/log
 router.delete('/:id/log', (req, res) => {
   const { id } = req.params;
   ptyManager.deleteLog(id);
   res.json({ success: true });
+});
+
+// GET /api/instances/:id/sessions - Get session history
+router.get('/:id/sessions', (req, res) => {
+  const { id } = req.params;
+  const instance = store.getById(id);
+  if (!instance) {
+    return res.status(404).json({ error: 'Instance not found' });
+  }
+
+  const sessions = ptyManager.getSessionHistory(id);
+  res.json(sessions);
 });
 
 export default router;
