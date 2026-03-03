@@ -17,6 +17,7 @@ interface KanbanColumnProps {
   authPrompts: Set<string>;
   taskCompletes: Set<string>;
   tokenStats: Map<string, { tokens: number; elapsed: string }>;
+  userPrompts: Map<string, string>;
   onSelect: (id: string) => void;
   onStart: (id: string) => void;
   onStop: (id: string) => void;
@@ -32,6 +33,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   authPrompts,
   taskCompletes,
   tokenStats,
+  userPrompts,
   onSelect,
   onStart,
   onStop,
@@ -65,6 +67,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             hasAuthPrompt={authPrompts.has(instance.id)}
             hasTaskComplete={taskCompletes.has(instance.id)}
             tokenStats={tokenStats.get(instance.id)}
+            userPrompt={userPrompts.get(instance.id)}
             onSelect={() => onSelect(instance.id)}
             onStart={() => onStart(instance.id)}
             onStop={() => onStop(instance.id)}

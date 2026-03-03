@@ -10,6 +10,7 @@ interface InstanceCardProps {
   hasAuthPrompt?: boolean;
   hasTaskComplete?: boolean;
   tokenStats?: { tokens: number; elapsed: string };
+  userPrompt?: string;
   onSelect: () => void;
   onStart: () => void;
   onStop: () => void;
@@ -24,6 +25,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   hasAuthPrompt,
   hasTaskComplete,
   tokenStats,
+  userPrompt,
   onSelect,
   onStart,
   onStop,
@@ -99,6 +101,12 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         <div className="flex items-center gap-1 text-xs text-cyan-400 mb-3">
           <ArrowDown size={12} />
           <span>{tokenStats.tokens.toLocaleString()} tokens · {tokenStats.elapsed}</span>
+        </div>
+      )}
+
+      {userPrompt && (
+        <div className="text-xs text-gray-500 mb-3 truncate" title={userPrompt}>
+          <span className="text-gray-600">&#10095;</span> {userPrompt}
         </div>
       )}
 

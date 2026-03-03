@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 import instancesRouter from './routes/instances';
+import filesystemRouter from './routes/filesystem';
 import { ptyManager } from './services/ptyManager';
 import { store } from './services/store';
 
@@ -21,6 +22,7 @@ app.use(express.json());
 
 // REST API routes
 app.use('/api/instances', instancesRouter);
+app.use('/api/filesystem', filesystemRouter);
 
 // Serve static files in production
 const clientDist = path.resolve(__dirname, '../../client/dist');
@@ -61,6 +63,12 @@ io.on('connection', (socket) => {
     const tokenStats = ptyManager.getTokenStats(instanceId);
     if (tokenStats) {
       socket.emit('instance:tokenStats', { instanceId, tokens: tokenStats.tokens, elapsed: tokenStats.elapsed });
+    }
+
+    // Send current user prompt if available
+    const userPrompt = ptyManager.getUserPrompt(instanceId);
+    if (userPrompt) {
+      socket.emit('instance:userPrompt', { instanceId, prompt: userPrompt });
     }
 
     // Resize PTY to match client terminal
@@ -119,6 +127,11 @@ ptyManager.onTaskComplete((instanceId) => {
 // Forward token stats
 ptyManager.onTokenStats((instanceId, stats) => {
   io.emit('instance:tokenStats', { instanceId, tokens: stats.tokens, elapsed: stats.elapsed });
+});
+
+// Forward user prompt notifications
+ptyManager.onUserPrompt((instanceId, data) => {
+  io.emit('instance:userPrompt', { instanceId, prompt: data.prompt });
 });
 
 const PORT = process.env.PORT || 3000;

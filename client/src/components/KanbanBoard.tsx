@@ -13,6 +13,7 @@ interface KanbanBoardProps {
   authPrompts: Set<string>;
   taskCompletes: Set<string>;
   tokenStats: Map<string, { tokens: number; elapsed: string }>;
+  userPrompts: Map<string, string>;
   onSelect: (id: string) => void;
   onStart: (id: string) => void;
   onStop: (id: string) => void;
@@ -29,6 +30,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   authPrompts,
   taskCompletes,
   tokenStats,
+  userPrompts,
   onSelect,
   onStart,
   onStop,
@@ -93,6 +95,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               authPrompts={authPrompts}
               taskCompletes={taskCompletes}
               tokenStats={tokenStats}
+              userPrompts={userPrompts}
               onSelect={onSelect}
               onStart={onStart}
               onStop={onStop}

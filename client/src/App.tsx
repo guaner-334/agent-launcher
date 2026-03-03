@@ -11,7 +11,7 @@ import { Wifi, WifiOff } from 'lucide-react';
 const App: React.FC = () => {
   const {
     connected, instances, setInstances, socket, refreshInstances,
-    authPrompts, taskCompletes, tokenStats, clearAuthPrompt, clearTaskComplete,
+    authPrompts, taskCompletes, tokenStats, userPrompts, clearAuthPrompt, clearTaskComplete,
   } = useSocket();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingInstance, setEditingInstance] = useState<Instance | null>(null);
@@ -92,6 +92,18 @@ const App: React.FC = () => {
         });
         const updated = await res.json();
         setInstances(prev => prev.map(i => i.id === editingInstance.id ? updated : i));
+
+        // If instance is running, prompt user to restart
+        const inst = instances.find(i => i.id === editingInstance.id);
+        if (inst && inst.runtime.processState === 'running') {
+          if (confirm('设置已更新。是否重启实例使配置生效？')) {
+            await fetch(`/api/instances/${editingInstance.id}/stop`, { method: 'POST' });
+            await new Promise(r => setTimeout(r, 500));
+            const startRes = await fetch(`/api/instances/${editingInstance.id}/start`, { method: 'POST' });
+            const startedData = await startRes.json();
+            setInstances(prev => prev.map(i => i.id === editingInstance.id ? startedData : i));
+          }
+        }
       } else {
         // Create
         const res = await fetch('/api/instances', {
@@ -107,7 +119,7 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Failed to save instance:', err);
     }
-  }, [editingInstance, setInstances]);
+  }, [editingInstance, setInstances, instances]);
 
   const handleEdit = useCallback((id: string) => {
     const instance = instances.find(i => i.id === id);
@@ -148,6 +160,7 @@ const App: React.FC = () => {
             authPrompts={authPrompts}
             taskCompletes={effectiveTaskCompletes}
             tokenStats={tokenStats}
+            userPrompts={userPrompts}
             onSelect={handleSelect}
             onStart={handleStart}
             onStop={handleStop}
@@ -177,6 +190,7 @@ const App: React.FC = () => {
       {showConfig && (
         <ConfigDialog
           instance={editingInstance}
+          instances={instances}
           onSave={handleSaveConfig}
           onClose={() => {
             setShowConfig(false);

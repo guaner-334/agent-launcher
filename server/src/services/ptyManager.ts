@@ -53,6 +53,7 @@ interface PtyInstance {
   busy: boolean;
   bytesSinceIdle: number;
   tokenStats: TokenStats | null;
+  lastUserPrompt: string;
 }
 
 const MAX_SCROLLBACK_CHARS = 100 * 1024; // 100KB per instance
@@ -68,6 +69,7 @@ class PtyManager {
   private onAuthPromptCallback: PtyEventCallback | null = null;
   private onTaskCompleteCallback: PtyEventCallback | null = null;
   private onTokenStatsCallback: PtyEventCallback | null = null;
+  private onUserPromptCallback: PtyEventCallback | null = null;
 
   onData(callback: PtyEventCallback): void {
     this.onDataCallback = callback;
@@ -89,9 +91,18 @@ class PtyManager {
     this.onTokenStatsCallback = callback;
   }
 
+  onUserPrompt(callback: PtyEventCallback): void {
+    this.onUserPromptCallback = callback;
+  }
+
   getTokenStats(instanceId: string): TokenStats | null {
     const ptyInst = this.ptys.get(instanceId);
     return ptyInst?.tokenStats ?? null;
+  }
+
+  getUserPrompt(instanceId: string): string {
+    const ptyInst = this.ptys.get(instanceId);
+    return ptyInst?.lastUserPrompt ?? '';
   }
 
   startInstance(instance: Instance, cols: number = 120, rows: number = 30): boolean {
@@ -140,14 +151,18 @@ class PtyManager {
       Object.assign(env, instance.env);
     }
 
-    // API configuration
+    // API configuration — always clear inherited auth vars to avoid cross-instance conflicts.
+    // Each instance must use ONLY its own credentials; inherited tokens/keys from the
+    // parent process or global settings would cause auth failures on different API endpoints.
+    delete env.ANTHROPIC_API_KEY;
+    delete env.ANTHROPIC_AUTH_TOKEN;
+    delete env.ANTHROPIC_BASE_URL;
+
     if (instance.apiKey) {
       env.ANTHROPIC_API_KEY = instance.apiKey;
     }
     if (instance.apiBaseUrl) {
       env.ANTHROPIC_BASE_URL = instance.apiBaseUrl;
-    } else {
-      delete env.ANTHROPIC_BASE_URL;
     }
 
     // Isolate Claude config directory
@@ -222,6 +237,7 @@ class PtyManager {
       busy: false,
       bytesSinceIdle: 0,
       tokenStats: null,
+      lastUserPrompt: '',
     };
 
     this.ptys.set(instance.id, ptyInst);
@@ -278,6 +294,19 @@ class PtyManager {
         if (authDetected) {
           this.onAuthPromptCallback(instance.id, { type: 'instance:authPrompt' });
           ptyInst.lineBuffer = '';
+        }
+      }
+
+      // User prompt detection — capture text after ❯ or > prompt marker
+      if (this.onUserPromptCallback) {
+        // Match "❯ " or "> " followed by user text (the prompt line)
+        const promptMatch = /[❯>]\s+(.+)/.exec(stripped);
+        if (promptMatch) {
+          const promptText = promptMatch[1].trim();
+          if (promptText.length > 0 && promptText !== ptyInst.lastUserPrompt) {
+            ptyInst.lastUserPrompt = promptText;
+            this.onUserPromptCallback(instance.id, { prompt: promptText });
+          }
         }
       }
 

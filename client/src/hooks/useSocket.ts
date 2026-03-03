@@ -9,6 +9,7 @@ export function useSocket() {
   const [authPrompts, setAuthPrompts] = useState<Set<string>>(new Set());
   const [taskCompletes, setTaskCompletes] = useState<Set<string>>(new Set());
   const [tokenStats, setTokenStats] = useState<Map<string, { tokens: number; elapsed: string }>>(new Map());
+  const [userPrompts, setUserPrompts] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     const socket = io('/', {
@@ -69,6 +70,15 @@ export function useSocket() {
       });
     });
 
+    // User prompt updates
+    socket.on('instance:userPrompt', ({ instanceId, prompt }: { instanceId: string; prompt: string }) => {
+      setUserPrompts(prev => {
+        const next = new Map(prev);
+        next.set(instanceId, prompt);
+        return next;
+      });
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -109,6 +119,7 @@ export function useSocket() {
     authPrompts,
     taskCompletes,
     tokenStats,
+    userPrompts,
     clearAuthPrompt,
     clearTaskComplete,
   };

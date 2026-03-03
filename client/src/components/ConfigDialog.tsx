@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
-import { Instance } from '../types';
+import { X, Plus, Trash2, FolderOpen } from 'lucide-react';
+import { Instance, InstanceWithRuntime } from '../types';
+import { FolderPicker } from './FolderPicker';
 
 interface ConfigDialogProps {
   instance?: Instance | null;
+  instances?: InstanceWithRuntime[];
   onSave: (data: Partial<Instance>) => void;
   onClose: () => void;
 }
 
-export const ConfigDialog: React.FC<ConfigDialogProps> = ({ instance, onSave, onClose }) => {
+export const ConfigDialog: React.FC<ConfigDialogProps> = ({ instance, instances, onSave, onClose }) => {
   const [form, setForm] = useState({
     name: '',
     workingDirectory: '',
@@ -21,6 +23,30 @@ export const ConfigDialog: React.FC<ConfigDialogProps> = ({ instance, onSave, on
     claudeConfigDir: '',
   });
   const [envEntries, setEnvEntries] = useState<{ key: string; value: string }[]>([]);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+
+  const applyTemplate = (templateId: string) => {
+    const tpl = instances?.find(i => i.id === templateId);
+    if (!tpl) return;
+    const proxyValue = tpl.env?.HTTP_PROXY || tpl.env?.HTTPS_PROXY || '';
+    setForm(f => ({
+      ...f,
+      apiBaseUrl: tpl.apiBaseUrl || '',
+      httpProxy: proxyValue,
+      apiKey: tpl.apiKey || '',
+      model: tpl.model || '',
+      systemPrompt: tpl.systemPrompt || '',
+      permissionMode: tpl.permissionMode || 'bypassPermissions',
+      claudeConfigDir: tpl.claudeConfigDir || '',
+    }));
+    setEnvEntries(
+      tpl.env
+        ? Object.entries(tpl.env)
+            .filter(([key]) => key !== 'HTTP_PROXY' && key !== 'HTTPS_PROXY')
+            .map(([key, value]) => ({ key, value }))
+        : []
+    );
+  };
 
   useEffect(() => {
     if (instance) {
@@ -75,6 +101,7 @@ export const ConfigDialog: React.FC<ConfigDialogProps> = ({ instance, onSave, on
     setEnvEntries(e => e.map((entry, idx) => idx === i ? { ...entry, [field]: val } : entry));
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg w-full max-w-lg mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
@@ -87,6 +114,22 @@ export const ConfigDialog: React.FC<ConfigDialogProps> = ({ instance, onSave, on
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          {!instance && instances && instances.length > 0 && (
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">从模板创建</label>
+              <select
+                onChange={e => { if (e.target.value) applyTemplate(e.target.value); }}
+                className="w-full bg-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                defaultValue=""
+              >
+                <option value="">-- 选择已有实例作为模板 --</option>
+                {instances.map(inst => (
+                  <option key={inst.id} value={inst.id}>{inst.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm text-gray-400 mb-1">名称 *</label>
             <input
@@ -101,14 +144,24 @@ export const ConfigDialog: React.FC<ConfigDialogProps> = ({ instance, onSave, on
 
           <div>
             <label className="block text-sm text-gray-400 mb-1">工作目录 *</label>
-            <input
-              type="text"
-              value={form.workingDirectory}
-              onChange={e => setForm(f => ({ ...f, workingDirectory: e.target.value }))}
-              className="w-full bg-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-              placeholder="例如: C:\Users\xxx\project"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={form.workingDirectory}
+                onChange={e => setForm(f => ({ ...f, workingDirectory: e.target.value }))}
+                className="flex-1 bg-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+                placeholder="例如: C:\Users\xxx\project"
+              />
+              <button
+                type="button"
+                onClick={() => setShowFolderPicker(true)}
+                className="px-2 py-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-400 hover:text-white"
+                title="浏览目录"
+              >
+                <FolderOpen size={16} />
+              </button>
+            </div>
           </div>
 
           <div>
@@ -258,6 +311,17 @@ export const ConfigDialog: React.FC<ConfigDialogProps> = ({ instance, onSave, on
         </form>
       </div>
     </div>
+    {showFolderPicker && (
+      <FolderPicker
+        initialPath={form.workingDirectory}
+        onSelect={(selectedPath) => {
+          setForm(f => ({ ...f, workingDirectory: selectedPath }));
+          setShowFolderPicker(false);
+        }}
+        onClose={() => setShowFolderPicker(false)}
+      />
+    )}
+    </>
   );
 };
 
