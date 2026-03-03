@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     AgentManager Release 打包脚本（开发者用）
 .DESCRIPTION
@@ -83,6 +83,8 @@ Copy-Item "server\package.json" "$releaseDir\server\"
 Copy-Item "start.bat" "$releaseDir\"
 Copy-Item "stop.bat" "$releaseDir\"
 Copy-Item "setup.ps1" "$releaseDir\"
+Copy-Item "start.vbs" "$releaseDir\"
+Copy-Item "tray.ps1" "$releaseDir\"
 
 # 创建空的 data 目录结构
 New-Item -ItemType Directory -Path "$releaseDir\data" -Force | Out-Null

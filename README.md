@@ -7,11 +7,16 @@
 
 ## 功能
 
-- **看板管理** — 拖拽卡片在 Todo / In Progress / Review / Done 之间切换
-- **多实例并行** — 同时运行多个 Claude Code，各自独立工作目录和配置
+- **看板管理** — 拖拽卡片在可自定义列名的看板之间切换
+- **多实例并行** — 同时运行多个 Claude Code，各自独立工作目录和 API 配置
 - **内嵌终端** — 基于 xterm.js，直接在浏览器中与 Claude 交互
 - **API 隔离** — 设置自定义 API 地址时自动创建隔离配置，无需全局切换
-- **一键启停** — 双击 `start.bat` 启动，关闭窗口即停止
+- **实例模板** — 创建新实例时可从已有实例复制配置
+- **实时状态** — 区分"运行中"和"正在工作"状态，token 用量实时追踪
+- **操作通知** — 需要授权/选择时卡片显示提醒图标 + 系统托盘弹窗通知
+- **任务完成通知** — agent 输出结束等待输入时发送系统通知
+- **会话历史** — 持久化保存对话日志，实例关闭后可查看历史记录
+- **系统托盘** — 双击 `start.vbs` 无控制台窗口运行，托盘图标管理
 
 ## 快速开始
 
@@ -20,10 +25,10 @@
 1. 从 [Releases](https://github.com/guaner-334/AgentManager/releases) 下载最新 zip
 2. 解压到任意目录
 3. 确保已安装 [Node.js 18+](https://nodejs.org/)（没有则右键运行 `setup.ps1`）
-4. 双击 **`start.bat`**
-5. 浏览器自动打开 `http://localhost:3000`
+4. 双击 **`start.vbs`**（托盘模式，无控制台窗口）或 **`start.bat`**（控制台模式）
+5. 浏览器打开 `http://localhost:3000`
 
-### 方式二：从源码安装
+### 方式二：从源码构建
 
 ```powershell
 git clone https://github.com/guaner-334/AgentManager.git
@@ -37,7 +42,7 @@ npm install
 npm run build
 ```
 
-安装完成后双击 **`start.bat`** 启动。
+安装完成后双击 **`start.vbs`** 或 **`start.bat`** 启动。
 
 ## 使用说明
 
@@ -48,29 +53,39 @@ npm run build
 | 字段 | 说明 | 必填 |
 |------|------|------|
 | 名称 | 实例显示名 | ✅ |
-| 工作目录 | Claude 的工作路径 | ✅ |
+| 工作目录 | Claude 的工作路径（可用文件夹选择器） | ✅ |
 | API Base URL | 自定义 API 地址（如 MiniMax） | 否 |
 | API Key | 自定义密钥 | 否 |
 | 模型 | 如 `claude-sonnet-4-20250514` | 否 |
 
-> 填写 API Base URL 后，启动时会自动创建隔离配置目录，不影响其他实例。
+> 可从已有实例模板创建，自动复制 API 配置。
 
 ### 启动 / 停止
 
-- 点击实例卡片上的 **▶ 启动** 按钮
+- 点击实例卡片上的 ▶ 按钮，或在右侧终端面板点击「启动实例」
 - 点击卡片进入终端面板，直接与 Claude 对话
-- 点击 **■ 停止** 结束实例
+- 点击 ■ 按钮停止实例
 
-### 看板拖拽
+### 状态指示
 
-直接拖动卡片到不同列来管理任务状态。
+- **空闲** — 实例未启动
+- **运行中** — 实例已启动，等待用户输入
+- **正在工作** — agent 正在输出内容（文字波浪动效）
+- **⚠ 操作提醒** — 需要用户授权或选择（琥珀色图标，处理后自动消失）
+
+### 看板管理
+
+- 拖动卡片到不同列管理任务状态
+- 双击列标题可自定义列名
 
 ## 项目结构
 
 ```
 AgentManager/
-├── start.bat              # 双击启动
-├── stop.bat               # 双击停止
+├── start.vbs              # 托盘模式启动（推荐）
+├── start.bat              # 控制台模式启动
+├── stop.bat               # 停止服务
+├── tray.ps1               # 系统托盘 GUI
 ├── setup.ps1              # 一键安装环境
 ├── build-release.ps1      # 打包 Release（开发者用）
 ├── server/                # Express + Socket.IO 后端
@@ -81,17 +96,23 @@ AgentManager/
 │       │   ├── store.ts       # 实例数据持久化
 │       │   └── configIsolation.ts  # API 隔离配置
 │       └── routes/
-│           └── instances.ts   # REST API
+│           ├── instances.ts   # 实例 REST API
+│           └── filesystem.ts  # 文件夹浏览 API
 ├── client/                # React + Vite 前端
 │   └── src/
 │       ├── App.tsx
 │       └── components/
 │           ├── KanbanBoard.tsx    # 看板
+│           ├── KanbanColumn.tsx   # 看板列（可编辑列名）
 │           ├── InstanceCard.tsx   # 实例卡片
 │           ├── TerminalPanel.tsx  # 终端面板
-│           └── ConfigDialog.tsx   # 配置弹窗
+│           ├── ConfigDialog.tsx   # 配置弹窗
+│           ├── FolderPicker.tsx   # 文件夹选择器
+│           └── StatusBadge.tsx    # 状态徽章
 └── data/                  # 运行时数据（自动生成）
-    └── instances.json
+    ├── instances.json
+    ├── logs/              # 终端日志
+    └── claude-configs/    # 隔离配置目录
 ```
 
 ## 开发
