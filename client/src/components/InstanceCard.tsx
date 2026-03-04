@@ -110,7 +110,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
 
       {userPrompt && (
         <div className="text-xs text-gray-500 mb-3 truncate" title={userPrompt}>
-          <span className="text-gray-600">&#10095;</span> {userPrompt}
+          <span className="text-gray-600">&#10095;</span> {userPrompt.split('\n').pop()}
         </div>
       )}
 
