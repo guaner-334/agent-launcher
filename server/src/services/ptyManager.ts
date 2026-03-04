@@ -61,14 +61,18 @@ interface PtyInstance {
   outputting: boolean;
   outputTimer: ReturnType<typeof setTimeout> | null;
   pendingAuth: boolean;
+  authDetectedAt: number;
+  lastWriteTime: number;
+  resizeSuppressUntil: number;
 }
 
 const MAX_SCROLLBACK_CHARS = 100 * 1024; // 100KB per instance
 const MAX_LINE_BUFFER = 2000;
 const BUSY_THRESHOLD = 200;
 const OUTPUT_IDLE_TIMEOUT = 3000; // 3s no output → not outputting
+const RESIZE_SUPPRESS_MS = 1500; // suppress state tracking after resize (conpty redraws)
 const LOGS_DIR = path.resolve(__dirname, '../../../data/logs');
-const TOKEN_REGEX = /Working[…\.]+\s+\(([^·]+)\s*·\s*[↓↑]\s*([\d,]+)\s*tokens/;
+const TOKEN_REGEX = /\w+[…\.]+\s+\(([^·]+)\s*·\s*[↓↑]\s*([\d,.]+k?)\s*tokens/i;
 
 class PtyManager {
   private ptys: Map<string, PtyInstance> = new Map();
@@ -111,6 +115,28 @@ class PtyManager {
 
   onAuthCleared(callback: PtyEventCallback): void {
     this.onAuthClearedCallback = callback;
+  }
+
+  /**
+   * Fallback auth check: scan the tail of the scrollback buffer for auth patterns.
+   * Called when output stops (3s timeout or idle prompt) to catch auth prompts
+   * that were missed by the real-time chunk-based detection.
+   * Returns true if auth was detected.
+   */
+  private recheckAuthFromScrollback(instanceId: string, ptyInst: PtyInstance): boolean {
+    if (ptyInst.pendingAuth || !this.onAuthPromptCallback) return false;
+    // Check the last few scrollback chunks (recent terminal content)
+    const tail = ptyInst.scrollbackBuffer.slice(-5).join('');
+    const recentContent = stripAnsi(tail);
+    for (const pattern of AUTH_PATTERNS) {
+      if (pattern.test(recentContent)) {
+        ptyInst.pendingAuth = true;
+        ptyInst.bytesSinceIdle = 0;
+        this.onAuthPromptCallback(instanceId, { type: 'instance:authPrompt' });
+        return true;
+      }
+    }
+    return false;
   }
 
   isOutputting(instanceId: string): boolean {
@@ -267,6 +293,9 @@ class PtyManager {
       outputting: false,
       outputTimer: null,
       pendingAuth: false,
+      authDetectedAt: 0,
+      lastWriteTime: 0,
+      resizeSuppressUntil: 0,
     };
 
     this.ptys.set(instance.id, ptyInst);
@@ -303,7 +332,13 @@ class PtyManager {
         const tokenMatch = TOKEN_REGEX.exec(stripped) || TOKEN_REGEX.exec(ptyInst.lineBuffer);
         if (tokenMatch) {
           const elapsed = tokenMatch[1].trim();
-          const tokens = parseInt(tokenMatch[2].replace(/,/g, ''), 10);
+          const rawTokens = tokenMatch[2];
+          let tokens: number;
+          if (rawTokens.toLowerCase().endsWith('k')) {
+            tokens = Math.round(parseFloat(rawTokens.slice(0, -1)) * 1000);
+          } else {
+            tokens = parseInt(rawTokens.replace(/,/g, ''), 10);
+          }
           if (!isNaN(tokens)) {
             ptyInst.tokenStats = { tokens, elapsed };
             this.onTokenStatsCallback(instance.id, { tokens, elapsed });
@@ -322,48 +357,88 @@ class PtyManager {
         }
         if (authDetected) {
           ptyInst.pendingAuth = true;
+          ptyInst.authDetectedAt = Date.now();
           this.onAuthPromptCallback(instance.id, { type: 'instance:authPrompt' });
           ptyInst.lineBuffer = '';
+          ptyInst.bytesSinceIdle = 0; // Reset so auth doesn't get immediately cleared by idle check
+          // 立即停止"正在工作"，进入"待确认"
+          if (ptyInst.outputting && this.onOutputStateCallback) {
+            ptyInst.outputting = false;
+            if (ptyInst.outputTimer) { clearTimeout(ptyInst.outputTimer); ptyInst.outputTimer = null; }
+            this.onOutputStateCallback(instance.id, { outputting: false });
+          }
         }
       }
 
       // Output state + task completion detection
+      // During resize suppress, skip all state tracking to avoid false "正在工作"
+      // triggered by conpty screen redraws
       const visibleLen = stripped.trim().length;
-      ptyInst.bytesSinceIdle += stripped.length;
+      const suppressedByResize = Date.now() < ptyInst.resizeSuppressUntil;
 
-      // Mark as outputting only when there's visible content
-      if (visibleLen > 0) {
+      if (visibleLen > 0 && !suppressedByResize) {
+        ptyInst.bytesSinceIdle += stripped.length;
         ptyInst.busy = true;
-        if (!ptyInst.outputting && this.onOutputStateCallback) {
-          ptyInst.outputting = true;
-          this.onOutputStateCallback(instance.id, { outputting: true });
-        }
-        // Auth cleared: substantial output after auth prompt → user handled it
-        if (ptyInst.pendingAuth && ptyInst.bytesSinceIdle > BUSY_THRESHOLD) {
+        // Auth cleared: substantial output after user responded to auth prompt
+        if (ptyInst.pendingAuth && ptyInst.bytesSinceIdle > BUSY_THRESHOLD
+            && ptyInst.lastWriteTime > ptyInst.authDetectedAt) {
           ptyInst.pendingAuth = false;
           if (this.onAuthClearedCallback) {
             this.onAuthClearedCallback(instance.id, {});
           }
         }
-        // Reset idle timer
-        if (ptyInst.outputTimer) clearTimeout(ptyInst.outputTimer);
-        ptyInst.outputTimer = setTimeout(() => {
-          ptyInst.outputTimer = null;
-          if (ptyInst.outputting) {
-            ptyInst.outputting = false;
+        // Only update outputting when not in pending auth state
+        if (!ptyInst.pendingAuth) {
+          // Require substantial output before transitioning to "正在工作"
+          // to avoid false triggers from keyboard echo
+          if (!ptyInst.outputting && ptyInst.bytesSinceIdle > BUSY_THRESHOLD) {
             if (this.onOutputStateCallback) {
-              this.onOutputStateCallback(instance.id, { outputting: false });
+              ptyInst.outputting = true;
+              this.onOutputStateCallback(instance.id, { outputting: true });
             }
           }
-        }, OUTPUT_IDLE_TIMEOUT);
+          // Reset idle timer only when outputting
+          if (ptyInst.outputting) {
+            if (ptyInst.outputTimer) clearTimeout(ptyInst.outputTimer);
+            ptyInst.outputTimer = setTimeout(() => {
+              ptyInst.outputTimer = null;
+              if (ptyInst.outputting) {
+                ptyInst.outputting = false;
+                if (this.onOutputStateCallback) {
+                  this.onOutputStateCallback(instance.id, { outputting: false });
+                }
+                // Check for auth patterns in scrollback FIRST
+                const authFound = this.recheckAuthFromScrollback(instance.id, ptyInst);
+                // Only send taskComplete if no auth detected
+                if (!authFound && !ptyInst.pendingAuth && this.onTaskCompleteCallback) {
+                  this.onTaskCompleteCallback(instance.id, { type: 'instance:taskComplete' });
+                }
+              }
+            }, OUTPUT_IDLE_TIMEOUT);
+          }
+        }
       }
 
-      // Idle prompt detected → immediately stop outputting + task complete
-      if (ptyInst.busy && ptyInst.bytesSinceIdle > BUSY_THRESHOLD) {
+      // Idle prompt detected → immediately stop outputting + handle completion
+      if (!suppressedByResize && ptyInst.busy && ptyInst.bytesSinceIdle > BUSY_THRESHOLD) {
         for (const pattern of IDLE_PROMPT_PATTERNS) {
           if (pattern.test(ptyInst.lineBuffer)) {
-            if (this.onTaskCompleteCallback) {
-              this.onTaskCompleteCallback(instance.id, { type: 'instance:taskComplete' });
+            if (ptyInst.pendingAuth) {
+              // Auth scenario: user handled the auth prompt, only clear auth (no taskComplete)
+              ptyInst.pendingAuth = false;
+              if (this.onAuthClearedCallback) {
+                this.onAuthClearedCallback(instance.id, {});
+              }
+            } else {
+              // Before emitting taskComplete, re-check scrollback for missed auth prompts
+              if (this.recheckAuthFromScrollback(instance.id, ptyInst)) {
+                // Auth found — don't emit taskComplete
+              } else {
+                // Normal task completion: model finished work and returned to prompt
+                if (this.onTaskCompleteCallback) {
+                  this.onTaskCompleteCallback(instance.id, { type: 'instance:taskComplete' });
+                }
+              }
             }
             ptyInst.busy = false;
             ptyInst.bytesSinceIdle = 0;
@@ -373,13 +448,6 @@ class PtyManager {
               ptyInst.outputting = false;
               if (ptyInst.outputTimer) { clearTimeout(ptyInst.outputTimer); ptyInst.outputTimer = null; }
               this.onOutputStateCallback(instance.id, { outputting: false });
-            }
-            // Clear pending auth (user rejected or action finished)
-            if (ptyInst.pendingAuth) {
-              ptyInst.pendingAuth = false;
-              if (this.onAuthClearedCallback) {
-                this.onAuthClearedCallback(instance.id, {});
-              }
             }
             break;
           }
@@ -405,6 +473,22 @@ class PtyManager {
     const ptyInst = this.ptys.get(instanceId);
     if (!ptyInst) return false;
     ptyInst.pty.write(data);
+
+    // Reset byte counter on user input so keyboard echo doesn't accumulate
+    ptyInst.lastWriteTime = Date.now();
+    ptyInst.bytesSinceIdle = 0;
+
+    // User input means Claude is idle → immediately clear outputting state
+    if (ptyInst.outputting) {
+      ptyInst.outputting = false;
+      if (ptyInst.outputTimer) { clearTimeout(ptyInst.outputTimer); ptyInst.outputTimer = null; }
+      if (this.onOutputStateCallback) {
+        this.onOutputStateCallback(instanceId, { outputting: false });
+      }
+      if (!ptyInst.pendingAuth && this.onTaskCompleteCallback) {
+        this.onTaskCompleteCallback(instanceId, { type: 'instance:taskComplete' });
+      }
+    }
 
     // Track user input for prompt display
     for (const ch of data) {
@@ -432,6 +516,9 @@ class PtyManager {
   resize(instanceId: string, cols: number, rows: number): boolean {
     const ptyInst = this.ptys.get(instanceId);
     if (!ptyInst) return false;
+    // Suppress outputting state changes briefly after resize to avoid
+    // false "正在工作" triggered by PTY redraw
+    ptyInst.resizeSuppressUntil = Date.now() + RESIZE_SUPPRESS_MS;
     try {
       ptyInst.pty.resize(cols, rows);
     } catch (e) { /* ignore resize errors */ }

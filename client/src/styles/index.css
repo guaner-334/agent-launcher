@@ -73,15 +73,6 @@ body {
   color: #9ca3af;
 }
 
-/* 防止 IME 候选词窗口导致窗口位移 */
-.xterm-helper-textarea {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
 /* Wave bounce animation for "正在工作" status text */
 @keyframes wave-bounce {
   0%, 100% { transform: translateY(0); }

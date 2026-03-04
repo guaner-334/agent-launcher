@@ -25,12 +25,28 @@ const pendingAuthPrompts = new Map<string, string>();
 // Pending task-complete notifications: instanceId → instance name (one-shot, cleared after poll)
 const pendingTaskDone = new Map<string, string>();
 
+// Notification toggle (in-memory)
+let notificationsEnabled = true;
+
 // REST API routes
 app.use('/api/instances', instancesRouter);
 app.use('/api/filesystem', filesystemRouter);
 
+// Notification settings endpoints
+app.get('/api/settings/notifications', (_req, res) => {
+  res.json({ enabled: notificationsEnabled });
+});
+app.put('/api/settings/notifications', (req, res) => {
+  const { enabled } = req.body;
+  if (typeof enabled === 'boolean') {
+    notificationsEnabled = enabled;
+  }
+  res.json({ enabled: notificationsEnabled });
+});
+
 // Notification endpoint for tray polling
 app.get('/api/notifications', (_req, res) => {
+  if (!notificationsEnabled) return res.json([]);
   const authItems = Array.from(pendingAuthPrompts.entries()).map(([id, name]) => ({
     type: 'auth',
     instanceId: id,

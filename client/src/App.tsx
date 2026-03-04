@@ -6,7 +6,7 @@ import { WelcomePanel } from './components/WelcomePanel';
 import { ConfigDialog } from './components/ConfigDialog';
 import { SessionHistoryDialog } from './components/SessionHistoryDialog';
 import { Instance, KanbanStatus } from './types';
-import { Wifi, WifiOff } from 'lucide-react';
+import { Wifi, WifiOff, Bell, BellOff } from 'lucide-react';
 
 const App: React.FC = () => {
   const {
@@ -19,10 +19,15 @@ const App: React.FC = () => {
   const [sessionHistoryId, setSessionHistoryId] = useState<string | null>(null);
   const [startingIds, setStartingIds] = useState<Set<string>>(new Set());
   const startingIdsRef = useRef<Set<string>>(new Set());
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  // Refresh instances on mount
+  // Refresh instances and notification settings on mount
   useEffect(() => {
     refreshInstances();
+    fetch('/api/settings/notifications')
+      .then(r => r.json())
+      .then(d => setNotificationsEnabled(d.enabled))
+      .catch(() => {});
   }, [refreshInstances]);
 
   const selectedInstance = instances.find(i => i.id === selectedId) || null;
@@ -150,6 +155,20 @@ const App: React.FC = () => {
     setSessionHistoryId(id);
   }, []);
 
+  const toggleNotifications = useCallback(async () => {
+    const newVal = !notificationsEnabled;
+    setNotificationsEnabled(newVal);
+    try {
+      await fetch('/api/settings/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newVal }),
+      });
+    } catch {
+      setNotificationsEnabled(!newVal); // revert on error
+    }
+  }, [notificationsEnabled]);
+
   // Don't show task complete badge for the currently selected instance
   const effectiveTaskCompletes = new Set(taskCompletes);
   if (selectedId) effectiveTaskCompletes.delete(selectedId);
@@ -157,9 +176,18 @@ const App: React.FC = () => {
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Connection status bar */}
-      <div className={`flex items-center gap-2 px-3 py-1 text-xs ${connected ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-        {connected ? <Wifi size={12} /> : <WifiOff size={12} />}
-        {connected ? 'Connected' : 'Disconnected'}
+      <div className={`flex items-center justify-between px-3 py-1 text-xs ${connected ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+        <div className="flex items-center gap-2">
+          {connected ? <Wifi size={12} /> : <WifiOff size={12} />}
+          {connected ? 'Connected' : 'Disconnected'}
+        </div>
+        <button
+          onClick={toggleNotifications}
+          className="flex items-center gap-1 hover:opacity-70 transition-opacity"
+          title={notificationsEnabled ? '关闭通知' : '开启通知'}
+        >
+          {notificationsEnabled ? <Bell size={12} /> : <BellOff size={12} />}
+        </button>
       </div>
 
       {/* Main layout */}

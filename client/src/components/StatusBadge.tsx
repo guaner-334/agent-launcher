@@ -3,6 +3,8 @@ import React from 'react';
 interface StatusBadgeProps {
   state: string;
   outputting?: boolean;
+  hasAuthPrompt?: boolean;
+  hasTaskComplete?: boolean;
 }
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
@@ -14,14 +16,18 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
 
 const WORKING_TEXT = '正在工作';
 
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ state, outputting }) => {
-  const isOutputting = state === 'running' && outputting;
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ state, outputting, hasAuthPrompt, hasTaskComplete }) => {
+  const isRunning = state === 'running';
+  const isOutputting = isRunning && outputting;
+  const isAuthPrompt = isRunning && !outputting && hasAuthPrompt;
+  const isTaskComplete = isRunning && !outputting && hasTaskComplete;
   const config = STATUS_CONFIG[state] || STATUS_CONFIG.idle;
 
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs">
-      <span className={`w-2 h-2 rounded-full ${config.color}`} />
-      {isOutputting ? (
+  // 优先级：正在工作 > 待确认 > 已完成 > 默认状态
+  if (isOutputting) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs">
+        <span className="w-2 h-2 rounded-full bg-green-500" />
         <span className="inline-flex text-green-400">
           {[...WORKING_TEXT].map((ch, i) => (
             <span
@@ -35,9 +41,32 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ state, outputting }) =
             </span>
           ))}
         </span>
-      ) : (
-        <span className="text-gray-400">{config.label}</span>
-      )}
+      </span>
+    );
+  }
+
+  if (isAuthPrompt) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs">
+        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+        <span className="text-amber-400 animate-pulse">待确认</span>
+      </span>
+    );
+  }
+
+  if (isTaskComplete) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs">
+        <span className="w-2 h-2 rounded-full bg-green-500" />
+        <span className="text-green-400">已完成</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs">
+      <span className={`w-2 h-2 rounded-full ${config.color}`} />
+      <span className="text-gray-400">{config.label}</span>
     </span>
   );
 };

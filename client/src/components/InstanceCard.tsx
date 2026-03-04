@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { Play, Square, Settings, Trash2, FolderOpen, GripVertical, Globe, History, ShieldAlert, CheckCircle, ArrowDown, Loader2 } from 'lucide-react';
+import { Play, Square, Settings, Trash2, FolderOpen, GripVertical, Globe, History, ArrowDown, Loader2 } from 'lucide-react';
 import { InstanceWithRuntime } from '../types';
 import { StatusBadge } from './StatusBadge';
 
@@ -70,17 +70,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
           </span>
           <h3 className="font-medium text-sm truncate">{instance.name}</h3>
         </div>
-        <StatusBadge state={instance.runtime.processState} outputting={isOutputting} />
-        {hasAuthPrompt && (
-          <span className="flex-shrink-0 text-amber-400 animate-pulse" title="Needs approval">
-            <ShieldAlert size={14} />
-          </span>
-        )}
-        {hasTaskComplete && (
-          <span className="flex-shrink-0 text-green-400" title="Task completed">
-            <CheckCircle size={14} />
-          </span>
-        )}
+        <StatusBadge state={instance.runtime.processState} outputting={isOutputting} hasAuthPrompt={hasAuthPrompt} hasTaskComplete={hasTaskComplete} />
       </div>
 
       <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
