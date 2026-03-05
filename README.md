@@ -1,6 +1,6 @@
 # Agent启动器
 
-自动化生成启动配置，让每个Claude Code实例使用独立的环境配置，从而实现同时使用不同的api和模型（如可以同时使用MiniMax和Claude Code的模型）
+让每个Claude Code实例使用独立的环境配置，从而实现同时使用不同的api和模型（如可以同时使用MiniMax和Claude Code的模型）
 
 你只需要填写 API 地址、密钥、模型等信息，它会自动帮你生成一条启动命令。复制这条命令到终端里粘贴运行，就能启动隔离环境的 Claude Code 了。
 
