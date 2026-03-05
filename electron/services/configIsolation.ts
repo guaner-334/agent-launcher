@@ -32,9 +32,7 @@ export function ensureIsolatedConfig(
   if (apiBaseUrl) {
     settings.env.ANTHROPIC_BASE_URL = apiBaseUrl
   }
-  if (apiKey) {
-    settings.env.ANTHROPIC_API_KEY = apiKey
-  }
+  // API Key is NOT written to config files for security — passed via env at runtime
 
   fs.writeFileSync(isolatedSettings, JSON.stringify(settings, null, 2))
 

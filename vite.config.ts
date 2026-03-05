@@ -12,13 +12,6 @@ export default defineConfig({
         onstart(args) {
           args.startup()
         },
-        vite: {
-          build: {
-            rollupOptions: {
-              external: ['node-pty'],
-            },
-          },
-        },
       },
       {
         entry: 'electron/preload.ts',

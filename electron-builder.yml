@@ -1,21 +1,30 @@
-appId: com.agentmanager.app
-productName: AgentManager
+appId: com.agent-launcher.app
+productName: Agent启动器
 directories:
   output: release
 files:
   - dist-electron
   - dist
-  - "!node_modules/**/*"
-  - node_modules/node-pty/**/*
+  - package.json
 extraResources:
   - from: data
     to: data
     filter:
       - "**/*"
       - "!instances.json"
-      - "!logs/**"
       - "!claude-configs/**"
 win:
-  target: portable
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
   icon: null
-asar: false
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Agent启动器
+asar: true

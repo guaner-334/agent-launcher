@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { encrypt, decrypt } from './crypto'
 
 export interface Instance {
   id: string
@@ -12,16 +13,8 @@ export interface Instance {
   permissionMode?: string
   claudeConfigDir?: string
   env?: Record<string, string>
-  kanbanStatus: 'todo' | 'in-progress' | 'review' | 'done'
   createdAt: string
   updatedAt: string
-}
-
-export interface SessionEntry {
-  startedAt: string
-  endedAt: string | null
-  exitCode: number | null
-  signal: string | null
 }
 
 export class InstanceStore {
@@ -42,7 +35,13 @@ export class InstanceStore {
       }
       if (fs.existsSync(this.dataFile)) {
         const data = fs.readFileSync(this.dataFile, 'utf-8')
-        this.instances = JSON.parse(data)
+        const raw = JSON.parse(data) as any[]
+        this.instances = raw.map(({ kanbanStatus, ...rest }) => ({
+          ...rest,
+          apiKey: rest.apiKey ? decrypt(rest.apiKey) : undefined,
+        }))
+        // Auto-migrate: re-save to encrypt any plaintext keys
+        this.save()
       } else {
         this.instances = []
         this.save()
@@ -55,7 +54,11 @@ export class InstanceStore {
 
   private save(): void {
     try {
-      fs.writeFileSync(this.dataFile, JSON.stringify(this.instances, null, 2))
+      const toWrite = this.instances.map(inst => ({
+        ...inst,
+        apiKey: inst.apiKey ? encrypt(inst.apiKey) : undefined,
+      }))
+      fs.writeFileSync(this.dataFile, JSON.stringify(toWrite, null, 2))
     } catch (err) {
       console.error('Failed to save store:', err)
     }

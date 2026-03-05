@@ -5,11 +5,10 @@ dist-electron/
 data/instances.json
 data/logs/
 data/claude-configs/
-data/claude-config/
-data/archives/
-data/messages/
+data/scripts/
 
 release/
 
 *.log
 package-lock.json
+yarn.lock

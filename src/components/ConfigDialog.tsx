@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { X, Plus, Trash2, FolderOpen } from 'lucide-react'
-import { Instance, InstanceWithRuntime } from '../types'
+import { Instance } from '../types'
 import { FolderPicker } from './FolderPicker'
 
 interface ConfigDialogProps {
   instance?: Instance | null
-  instances?: InstanceWithRuntime[]
+  instances?: Instance[]
   onSave: (data: Partial<Instance>) => void
   onClose: () => void
 }

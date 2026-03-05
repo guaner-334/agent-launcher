@@ -1,139 +1,133 @@
-# AgentManager
+# Agent启动器
 
-多实例 Claude Code CLI 管理器 — Electron 桌面应用。
+一个帮你管理和启动 Claude Code 的桌面小工具。
 
-![Electron](https://img.shields.io/badge/Electron-35-blue)
-![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
-![Platform](https://img.shields.io/badge/Platform-Windows-blue)
+你只需要填写 API 地址、密钥、模型等信息，它会自动帮你生成一条启动命令。复制这条命令到终端里粘贴运行，就能启动 Claude Code 了。
 
-## 功能
+## 这个工具能做什么？
 
-- **看板管理** — 拖拽卡片在可自定义列名的看板之间切换
-- **多实例并行** — 同时运行多个 Claude Code，各自独立工作目录和 API 配置
-- **独立终端窗口** — 每个实例拥有独立的 Electron 终端窗口（xterm.js），原生体验
-- **API 隔离** — 设置自定义 API 地址时自动创建隔离 `CLAUDE_CONFIG_DIR`，无需全局切换
-- **实例模板** — 创建新实例时可从已有实例复制配置
-- **实时状态** — 区分"运行中"、"正在工作"、"待确认"、"已完成"四种状态，token 用量实时追踪
-- **操作通知** — 需要授权/选择时卡片提醒 + 系统通知弹窗
-- **通知开关** — 顶部状态栏铃铛按钮一键开关系统通知
-- **任务完成通知** — agent 输出结束等待输入时发送系统通知
-- **会话历史** — 持久化保存对话日志，可回看历史记录
-- **系统托盘** — 关闭窗口最小化到托盘，后台持续运行
+- 保存多套不同的 API 配置（比如官方 API、第三方中转等），随时切换
+- 自动生成正确的启动命令，不需要自己拼参数
+- API Key 加密存储在本地，界面上只显示脱敏的 Key，不会泄露
+- 从已有配置一键复制创建新配置
 
-## 快速开始
+## 下载安装
 
-### 环境要求
+### 方式一：直接下载（推荐新手）
 
-- **Node.js** 18+
-- **Claude Code CLI**（`npm install -g @anthropic-ai/claude-code` 或通过 npx 使用）
-- **C++ Build Tools**（编译 node-pty 需要，Windows 需安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)）
-- **Python**（node-gyp 依赖，需安装 setuptools：`pip install setuptools`）
+前往 [Releases](https://github.com/guaner-334/agent-launcher/releases) 页面，下载最新版本：
 
-### 安装与运行
+- **安装版**：`Agent启动器-Setup-x.x.x.exe` — 双击安装，自动创建桌面快捷方式
+- **便携版**：`Agent启动器-x.x.x.exe` — 无需安装，双击直接运行
+
+### 方式二：从源码运行（开发者）
+
+需要先安装 [Node.js](https://nodejs.org/)（18 或更高版本）。
 
 ```bash
-git clone git@github.com:guaner-334/AgentManager.git
-cd AgentManager
+git clone https://github.com/guaner-334/agent-launcher.git
+cd agent-launcher
 npm install
 npm run dev
 ```
 
-### 打包
+## 使用前准备
+
+在使用本工具之前，你需要先安装 Claude Code CLI（命令行工具）：
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+安装完成后，在终端输入 `claude --version`，如果能看到版本号就说明安装成功了。
+
+## 使用教程
+
+### 第一步：创建配置
+
+1. 打开 Agent启动器
+2. 点击左上角的 **+** 按钮
+3. 填写配置信息（带 * 的是必填项）：
+
+| 填什么 | 说明 | 举个例子 |
+|--------|------|----------|
+| **名称** * | 给这个配置起个名字，方便区分 | `我的助手` |
+| **工作目录** * | Claude 要在哪个文件夹里工作 | `C:\Users\你的用户名\project` |
+| **API Base URL** | 如果用第三方中转 API，填这里 | `https://api.example.com` |
+| **API Key** | 你的 API 密钥 | `sk-ant-xxx...` |
+| **模型** | 想用哪个模型 | `claude-sonnet-4-20250514` |
+| **权限模式** | 是否自动批准 Claude 的操作 | 默认是「自动批准」 |
+
+> 小提示：如果你已经有一个配置了，创建新配置时可以选择「从模板创建」，会自动复制 API 地址和密钥等信息。
+
+4. 点击 **创建** 按钮
+
+### 第二步：复制启动命令
+
+1. 在左侧列表中点击你刚创建的配置
+2. 右侧会显示生成好的启动命令（绿色文字区域）
+3. 点击右上角的 **复制** 按钮
+
+> 注意：界面上显示的命令里，API Key 是隐藏的（显示为 `sk-••••xxxx`），但复制到剪贴板的是包含完整 Key 的真实命令，可以直接使用。
+
+### 第三步：在终端中运行
+
+1. 打开 **CMD**（命令提示符）：
+   - 按 `Win + R`，输入 `cmd`，回车
+2. 在终端窗口里 **右键粘贴**（或按 `Ctrl + V`）
+3. 按 **回车** 运行
+
+Claude Code 就启动了！你可以直接在终端里和它对话。
+
+### 编辑和删除配置
+
+- 点击配置后，在右侧点击 **编辑** 按钮修改配置
+- 点击 **删除** 按钮删除不需要的配置
+
+## 安全说明
+
+- API Key 使用系统级加密（Windows DPAPI）存储在本地，即使别人拿到配置文件也看不到原始密钥
+- 界面上不会显示完整的 Key
+- 所有数据都存在你电脑本地，不会上传到任何服务器
+- 本项目完全开源，代码可审查
+
+## 常见问题
+
+### Q：提示找不到 claude 命令？
+
+需要先安装 Claude Code CLI：
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### Q：粘贴命令后报错？
+
+确保你使用的是 **CMD**（命令提示符），不是 PowerShell。命令格式是针对 CMD 的。
+
+### Q：配置数据存在哪里？
+
+存在程序同目录下的 `data` 文件夹中。便携版直接在 exe 旁边，安装版在安装目录下。
+
+### Q：什么是「权限模式」？
+
+- **bypassPermissions（自动批准）**：Claude 执行文件操作、运行命令时不需要你确认，适合信任的项目
+- **default（终端内确认）**：Claude 每次执行操作前都会问你是否允许，更安全
+
+### Q：什么是「API Base URL」？
+
+如果你用的是 Anthropic 官方 API，留空就行。如果用的是第三方中转服务（比如拼车、代理），填中转商给你的 API 地址。
+
+## 开发者信息
+
+### 打包发布
 
 ```bash
 npm run build      # 构建
-npm run package    # 打包为可分发安装包（electron-builder）
+npm run package    # 打包为 Windows 安装包和便携版
 ```
 
-## 使用说明
+打包产物在 `release/` 目录下。
 
-### 创建实例
+### 技术栈
 
-点击 **「+ 新建实例」**，填写：
-
-| 字段 | 说明 | 必填 |
-|------|------|------|
-| 名称 | 实例显示名 | 是 |
-| 工作目录 | Claude 的工作路径（可用文件夹选择器） | 是 |
-| API Base URL | 自定义 API 地址（如 MiniMax） | 否 |
-| API Key | 自定义密钥 | 否 |
-| 模型 | 如 `claude-sonnet-4-20250514` | 否 |
-| System Prompt | 自定义系统提示 | 否 |
-| 权限模式 | `bypassPermissions`（自动批准）或 `default` | 否 |
-
-> 可从已有实例模板创建，自动复制 API 配置。
-
-### 启动 / 停止
-
-- 点击实例卡片上的 **▶** 按钮启动，自动弹出独立终端窗口
-- 点击终端图标重新打开已运行实例的终端窗口
-- 点击 **■** 按钮停止实例
-
-### 状态指示
-
-- **空闲** — 实例未启动
-- **运行中** — 实例已启动，等待用户输入
-- **正在工作** — agent 正在输出内容（文字波浪动效）
-- **待确认** — 需要用户授权或选择（琥珀色脉冲）
-- **已完成** — agent 完成任务等待输入
-
-### 看板管理
-
-- 拖动卡片到不同列管理任务状态
-- 双击列标题可自定义列名
-
-## 项目结构
-
-```
-AgentManager/
-├── electron/                  # Electron 主进程
-│   ├── main.ts                    # 窗口管理、托盘、事件转发
-│   ├── preload.ts                 # contextBridge API
-│   ├── ipc/
-│   │   └── handlers.ts            # IPC 处理器（替代 REST API）
-│   └── services/
-│       ├── processManager.ts      # PTY 进程管理、状态检测
-│       ├── instanceStore.ts       # 实例数据持久化（JSON）
-│       └── configIsolation.ts     # API 隔离配置
-├── src/                       # React 渲染进程
-│   ├── App.tsx                    # 路由（看板 / 终端窗口）
-│   ├── main.tsx                   # React 入口
-│   ├── types.ts                   # 类型定义
-│   ├── hooks/
-│   │   └── useInstances.ts        # 实例状态管理（IPC 事件）
-│   └── components/
-│       ├── KanbanPage.tsx         # 主看板页面
-│       ├── KanbanBoard.tsx        # 看板拖拽容器
-│       ├── KanbanColumn.tsx       # 看板列（可编辑列名）
-│       ├── InstanceCard.tsx       # 实例卡片
-│       ├── TerminalWindow.tsx     # 独立终端窗口
-│       ├── ConfigDialog.tsx       # 配置弹窗
-│       ├── FolderPicker.tsx       # 文件夹选择器
-│       ├── SessionHistoryDialog.tsx # 会话历史
-│       └── StatusBadge.tsx        # 状态徽章
-├── data/                      # 运行时数据（自动生成）
-│   ├── instances.json
-│   ├── logs/
-│   └── claude-configs/
-├── vite.config.ts
-├── electron-builder.yml
-└── package.json
-```
-
-## 开发
-
-```bash
-npm run dev        # 启动开发模式（Vite + Electron 热重载）
-npm run build      # 构建生产版本
-npm run package    # 打包桌面安装包
-```
-
-## 技术栈
-
-- **Electron** — 桌面应用框架
-- **React + TypeScript** — UI
-- **Tailwind CSS** — 样式
-- **xterm.js** — 终端渲染
-- **node-pty** — PTY 进程管理
-- **@dnd-kit** — 拖拽排序
-- **Vite + vite-plugin-electron** — 构建工具
+Electron + React + TypeScript + Tailwind CSS + Vite
