@@ -1,21 +1,41 @@
 {
   "name": "agent-manager",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "private": true,
-  "workspaces": [
-    "server",
-    "client"
-  ],
+  "main": "dist-electron/main.js",
   "scripts": {
-    "dev:server": "npm run dev --workspace=server",
-    "dev:client": "npm run dev --workspace=client",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "build": "npm run build --workspace=client && npm run build --workspace=server"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "postinstall": "electron-builder install-app-deps",
+    "package": "npm run build && electron-builder --win --config electron-builder.yml"
   },
   "dependencies": {
-    "cross-spawn": "^7.0.6"
+    "node-pty": "^1.0.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "lucide-react": "^0.469.0",
+    "postcss": "^8.5.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6"
   }
 }

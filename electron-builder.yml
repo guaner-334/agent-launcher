@@ -1,0 +1,21 @@
+appId: com.agentmanager.app
+productName: AgentManager
+directories:
+  output: release
+files:
+  - dist-electron
+  - dist
+  - "!node_modules/**/*"
+  - node_modules/node-pty/**/*
+extraResources:
+  - from: data
+    to: data
+    filter:
+      - "**/*"
+      - "!instances.json"
+      - "!logs/**"
+      - "!claude-configs/**"
+win:
+  target: portable
+  icon: null
+asar: false

@@ -1,7 +1,6 @@
 node_modules/
-server/dist/
-client/dist/
-client/node_modules/
+dist/
+dist-electron/
 
 data/instances.json
 data/logs/
@@ -9,12 +8,8 @@ data/claude-configs/
 data/claude-config/
 data/archives/
 data/messages/
-data/test-*
 
 release/
 
 *.log
-pty-test*.log
-test-out.txt
-test-spawn.mjs
 package-lock.json
