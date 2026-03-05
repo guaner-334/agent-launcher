@@ -24,7 +24,7 @@ export interface ElectronAPI {
     create(data: Partial<Instance>): Promise<Instance>
     update(id: string, data: Partial<Instance>): Promise<Instance>
     delete(id: string): Promise<void>
-    generateCommand(id: string): Promise<GenerateCommandResult>
+    generateCommand(id: string, shell?: string): Promise<GenerateCommandResult>
   }
   filesystem: {
     browse(dirPath?: string): Promise<{ current: string; parent: string | null; directories: string[] }>

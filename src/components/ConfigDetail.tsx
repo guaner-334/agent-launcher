@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { Copy, Check, Pencil, Trash2, Terminal } from 'lucide-react'
 import { Instance } from '../types'
 
+type ShellType = 'cmd' | 'powershell'
+
 interface ConfigDetailProps {
   config: Instance | null
   onEdit: () => void
@@ -13,6 +15,9 @@ export const ConfigDetail: React.FC<ConfigDetailProps> = ({ config, onEdit, onDe
   const [copyText, setCopyText] = useState('')
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [shell, setShell] = useState<ShellType>(() => {
+    return (localStorage.getItem('preferred-shell') as ShellType) || 'cmd'
+  })
 
   useEffect(() => {
     if (!config) {
@@ -21,7 +26,7 @@ export const ConfigDetail: React.FC<ConfigDetailProps> = ({ config, onEdit, onDe
       return
     }
     setLoading(true)
-    window.electronAPI.instances.generateCommand(config.id)
+    window.electronAPI.instances.generateCommand(config.id, shell)
       .then(result => {
         setDisplayCommand(result.display)
         setCopyText(result.copyText)
@@ -31,7 +36,12 @@ export const ConfigDetail: React.FC<ConfigDetailProps> = ({ config, onEdit, onDe
         setCopyText('')
       })
       .finally(() => setLoading(false))
-  }, [config])
+  }, [config, shell])
+
+  const handleShellChange = (newShell: ShellType) => {
+    setShell(newShell)
+    localStorage.setItem('preferred-shell', newShell)
+  }
 
   const handleCopy = async () => {
     if (!copyText) return
@@ -62,6 +72,8 @@ export const ConfigDetail: React.FC<ConfigDetailProps> = ({ config, onEdit, onDe
   ]
 
   const envEntries = config.env ? Object.entries(config.env) : []
+
+  const shellLabel = shell === 'cmd' ? 'CMD' : 'PowerShell'
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -111,7 +123,31 @@ export const ConfigDetail: React.FC<ConfigDetailProps> = ({ config, onEdit, onDe
         {/* Command block */}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">启动命令</div>
+            <div className="flex items-center gap-2">
+              <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">启动命令</div>
+              <div className="flex bg-gray-800 rounded overflow-hidden border border-gray-700">
+                <button
+                  onClick={() => handleShellChange('cmd')}
+                  className={`px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                    shell === 'cmd'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  CMD
+                </button>
+                <button
+                  onClick={() => handleShellChange('powershell')}
+                  className={`px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                    shell === 'powershell'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  PowerShell
+                </button>
+              </div>
+            </div>
             <button
               onClick={handleCopy}
               className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
@@ -129,7 +165,7 @@ export const ConfigDetail: React.FC<ConfigDetailProps> = ({ config, onEdit, onDe
             )}
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            界面显示的 Key 已脱敏，复制到剪贴板的是包含完整 Key 的命令。粘贴到 CMD 终端执行即可。
+            界面显示的 Key 已脱敏，复制到剪贴板的是包含完整 Key 的命令。粘贴到 {shellLabel} 终端执行即可。
           </p>
         </div>
       </div>

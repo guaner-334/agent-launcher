@@ -58,11 +58,12 @@ export function registerIpcHandlers(store: InstanceStore, commandBuilder: Comman
     store.delete(id)
   })
 
-  ipcMain.handle('instances:generate-command', (_, id: string) => {
+  ipcMain.handle('instances:generate-command', (_, id: string, shell?: string) => {
     const instance = store.getById(id)
     if (!instance) throw new Error('Instance not found')
-    const display = commandBuilder.generateDisplayCommand(instance)
-    const copyText = commandBuilder.generateFullCommand(instance)
+    const shellType = (shell === 'powershell' ? 'powershell' : 'cmd') as import('../services/commandBuilder').ShellType
+    const display = commandBuilder.generateDisplayCommand(instance, shellType)
+    const copyText = commandBuilder.generateFullCommand(instance, shellType)
     return { display, copyText }
   })
 

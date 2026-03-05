@@ -4,6 +4,8 @@ import { execSync } from 'child_process'
 import { Instance } from './instanceStore'
 import { ensureIsolatedConfig } from './configIsolation'
 
+export type ShellType = 'cmd' | 'powershell'
+
 /** Escape a value for use inside a Windows batch `set "KEY=VALUE"` command */
 function escapeBatchValue(value: string): string {
   return value
@@ -14,6 +16,11 @@ function escapeBatchValue(value: string): string {
     .replace(/\|/g, '^|')
     .replace(/</g, '^<')
     .replace(/>/g, '^>')
+}
+
+/** Escape a value for use inside a PowerShell string */
+function escapePowerShellValue(value: string): string {
+  return value.replace(/'/g, "''")
 }
 
 /** Mask an API key for display: show prefix + last 4 chars */
@@ -64,35 +71,17 @@ export class CommandBuilder {
     return null
   }
 
-  private buildEnvAndArgs(instance: Instance, masked: boolean): { envLines: string[]; cliLine: string } {
-    const envLines: string[] = []
-
-    if (instance.apiKey) {
-      const value = masked ? maskKey(instance.apiKey) : escapeBatchValue(instance.apiKey)
-      envLines.push(`set "ANTHROPIC_API_KEY=${value}"`)
-    }
+  private getConfigDir(instance: Instance): string | null {
+    if (instance.claudeConfigDir) return instance.claudeConfigDir
     if (instance.apiBaseUrl) {
-      envLines.push(`set "ANTHROPIC_BASE_URL=${escapeBatchValue(instance.apiBaseUrl)}"`)
-    }
-
-    // Config isolation
-    if (instance.claudeConfigDir) {
-      envLines.push(`set "CLAUDE_CONFIG_DIR=${escapeBatchValue(instance.claudeConfigDir)}"`)
-    } else if (instance.apiBaseUrl) {
-      const autoConfigDir = ensureIsolatedConfig(
+      return ensureIsolatedConfig(
         this.configsDir, instance.id, instance.apiBaseUrl, instance.apiKey
       )
-      envLines.push(`set "CLAUDE_CONFIG_DIR=${escapeBatchValue(autoConfigDir)}"`)
     }
+    return null
+  }
 
-    // Custom env vars
-    if (instance.env) {
-      for (const [key, value] of Object.entries(instance.env)) {
-        envLines.push(`set "${escapeBatchValue(key)}=${escapeBatchValue(value)}"`)
-      }
-    }
-
-    // CLI args
+  private buildCliArgs(instance: Instance): string[] {
     const args: string[] = []
     if (instance.model) {
       args.push('--model', instance.model)
@@ -102,32 +91,78 @@ export class CommandBuilder {
       args.push('--permission-mode', permMode)
     }
     if (instance.systemPrompt) {
-      args.push('--append-system-prompt', `"${escapeBatchValue(instance.systemPrompt)}"`)
+      args.push('--append-system-prompt', `"${instance.systemPrompt}"`)
+    }
+    return args
+  }
+
+  private buildCmd(instance: Instance, masked: boolean): string {
+    const lines: string[] = []
+    lines.push(`cd /d "${escapeBatchValue(instance.workingDirectory)}"`)
+
+    if (instance.apiKey) {
+      const value = masked ? maskKey(instance.apiKey) : escapeBatchValue(instance.apiKey)
+      lines.push(`set "ANTHROPIC_API_KEY=${value}"`)
+    }
+    if (instance.apiBaseUrl) {
+      lines.push(`set "ANTHROPIC_BASE_URL=${escapeBatchValue(instance.apiBaseUrl)}"`)
+    }
+    const configDir = this.getConfigDir(instance)
+    if (configDir) {
+      lines.push(`set "CLAUDE_CONFIG_DIR=${escapeBatchValue(configDir)}"`)
+    }
+    if (instance.env) {
+      for (const [key, value] of Object.entries(instance.env)) {
+        lines.push(`set "${escapeBatchValue(key)}=${escapeBatchValue(value)}"`)
+      }
     }
 
+    const args = this.buildCliArgs(instance)
     const claudeCmd = this.claudePath || 'claude'
-    const cliLine = `${claudeCmd}${args.length ? ' ' + args.join(' ') : ''}`
+    lines.push(`${claudeCmd}${args.length ? ' ' + args.join(' ') : ''}`)
 
-    return { envLines, cliLine }
+    return lines.join('\n')
+  }
+
+  private buildPowerShell(instance: Instance, masked: boolean): string {
+    const lines: string[] = []
+    lines.push(`Set-Location '${escapePowerShellValue(instance.workingDirectory)}'`)
+
+    if (instance.apiKey) {
+      const value = masked ? maskKey(instance.apiKey) : escapePowerShellValue(instance.apiKey)
+      lines.push(`$env:ANTHROPIC_API_KEY='${value}'`)
+    }
+    if (instance.apiBaseUrl) {
+      lines.push(`$env:ANTHROPIC_BASE_URL='${escapePowerShellValue(instance.apiBaseUrl)}'`)
+    }
+    const configDir = this.getConfigDir(instance)
+    if (configDir) {
+      lines.push(`$env:CLAUDE_CONFIG_DIR='${escapePowerShellValue(configDir)}'`)
+    }
+    if (instance.env) {
+      for (const [key, value] of Object.entries(instance.env)) {
+        lines.push(`$env:${key}='${escapePowerShellValue(value)}'`)
+      }
+    }
+
+    const args = this.buildCliArgs(instance)
+    const claudeCmd = this.claudePath || 'claude'
+    lines.push(`${claudeCmd}${args.length ? ' ' + args.join(' ') : ''}`)
+
+    return lines.join('\n')
   }
 
   /** Generate a display-safe command with masked API key */
-  generateDisplayCommand(instance: Instance): string {
-    const { envLines, cliLine } = this.buildEnvAndArgs(instance, true)
-    const lines: string[] = []
-    lines.push(`cd /d "${escapeBatchValue(instance.workingDirectory)}"`)
-    lines.push(...envLines)
-    lines.push(cliLine)
-    return lines.join('\n')
+  generateDisplayCommand(instance: Instance, shell: ShellType = 'cmd'): string {
+    return shell === 'powershell'
+      ? this.buildPowerShell(instance, true)
+      : this.buildCmd(instance, true)
   }
 
   /** Generate the full command with real API key (for clipboard copy) */
-  generateFullCommand(instance: Instance): string {
-    const { envLines, cliLine } = this.buildEnvAndArgs(instance, false)
-    const lines: string[] = []
-    lines.push(`cd /d "${escapeBatchValue(instance.workingDirectory)}"`)
-    lines.push(...envLines)
-    lines.push(cliLine)
-    return lines.join('\n')
+  generateFullCommand(instance: Instance, shell: ShellType = 'cmd'): string {
+    return shell === 'powershell'
+      ? this.buildPowerShell(instance, false)
+      : this.buildCmd(instance, false)
   }
 }
